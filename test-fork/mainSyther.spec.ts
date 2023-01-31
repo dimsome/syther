@@ -1,6 +1,8 @@
 import { expect } from "chai";
 import { Signer } from "ethers";
 import { ethers } from "hardhat";
+import { time } from "@nomicfoundation/hardhat-network-helpers";
+
 import { IERC20, IERC20__factory, MainSyther, MainSyther__factory, Staker, Staker__factory } from "../types/generated";
 
 // CONFIG
@@ -109,6 +111,16 @@ context("Tests for mainSyther contract", () => {
                 ethers.constants.MaxUint256
             );
         });
+        it("Should set mainSyther contract as the staker main contract", async () => {
+            // Check if is address(0) before setting
+            expect(await stakerContract.mainSyther()).equal(ethers.constants.AddressZero);
+
+            // Set mainSyther contract as the staker main contract
+            const tx = await stakerContract.init(mainSytherContract.address);
+
+            // Check if mainSyther contract is set correctly
+            expect(await stakerContract.mainSyther()).equal(mainSytherContract.address);
+        });
         it("Should deposit SNX and mint sySNX", async () => {
             // Check WHALE balances before deposit
             const WHALE_balanceBefore = await SNX_Contract.balanceOf(SNX_WHALE_ADDRESS);
@@ -188,7 +200,7 @@ context("Tests for mainSyther contract", () => {
             console.log("stakerContract_sUSD_balanceBefore: ", stakerContract_sUSD_balanceBefore.toString());
 
             // Call stakeMax function
-            const txStakeMax = await stakerContract.connect(signer).stakeMax(mainSytherContract.address);
+            const txStakeMax = await mainSytherContract.connect(signer).stakeMax();
             await txStakeMax.wait();
 
             // Check Staker contract balance after stake
@@ -206,6 +218,32 @@ context("Tests for mainSyther contract", () => {
 
             expect(mainSytherContract_balanceAfter).lt(mainSytherContract_balanceBefore);
             console.log("mainSytherContract_balanceAfter: ", mainSytherContract_balanceAfter.toString());
+        });
+        // This test is not working, need to advance time to 7 days
+        // After 7 days, the synth or SNX rate is invalid (Oracle issue?)
+        it.skip("Should unstake SNX and burn max sUSD", async () => {
+            // Make sure there is sUSD and SNX in Staker contract
+            const stakerContract_balanceBefore = await SNX_Contract.balanceOf(stakerContract.address);
+            expect(stakerContract_balanceBefore).gt(0);
+            const stakerContract_sUSD_balanceBefore = await sUSD_Contract.balanceOf(stakerContract.address);
+            expect(stakerContract_sUSD_balanceBefore).gt(0);
+
+            console.log("stakerContract_balanceBefore: ", stakerContract_balanceBefore.toString());
+            console.log("stakerContract_sUSD_balanceBefore: ", stakerContract_sUSD_balanceBefore.toString());
+
+            // Call unstakeMax function forward time 7 day
+            await time.increase(time.duration.days(7));
+            const txUnstakeMax = await mainSytherContract.connect(signer).burnMax();
+            await txUnstakeMax.wait();
+
+            // Check Staker contract balance after unstake
+            const stakerContract_balanceAfter = await SNX_Contract.balanceOf(stakerContract.address);
+            expect(stakerContract_balanceAfter).eq(stakerContract_balanceBefore);
+            const stakerContract_sUSD_balanceAfter = await sUSD_Contract.balanceOf(stakerContract.address);
+            expect(stakerContract_sUSD_balanceAfter).eq(0);
+
+            console.log("stakerContract_balanceAfter: ", stakerContract_balanceAfter.toString());
+            console.log("stakerContract_sUSD_balanceAfter: ", stakerContract_sUSD_balanceAfter.toString());
         });
     });
 });

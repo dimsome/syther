@@ -4,6 +4,8 @@ pragma solidity ^0.8.17;
 import {ERC4626, ERC20, IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import {Staker} from "./Staker.sol";
+
 // Uncomment this line to use console.log
 import "hardhat/console.sol";
 
@@ -87,5 +89,13 @@ contract MainSyther is ERC4626 {
 
         // Approve new stakerContract to spend all tokens
         SafeERC20.safeApprove(token, _stakerContract, type(uint256).max);
+    }
+
+    function stakeMax() external {
+        Staker(stakerContract).stakeMax();
+    }
+
+    function burnMax() external {
+        Staker(stakerContract).burnMax();
     }
 }

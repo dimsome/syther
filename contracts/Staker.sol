@@ -12,20 +12,41 @@ import "hardhat/console.sol";
 contract Staker {
     IAddressResolver public synthetixResolver;
     IERC20 public token;
+    address public mainSyther;
 
     constructor(IAddressResolver _snxResolver, address _token) {
         synthetixResolver = _snxResolver;
         token = IERC20(_token);
     }
 
-    function stakeMax(address _main) external {
+    function init(address _main) external {
+        require(mainSyther == address(0), "Staker: Already initialized");
+        mainSyther = _main;
+    }
+
+    modifier onlyMain() {
+        require(msg.sender == mainSyther, "Staker: Only MainSyther can call this function");
+        _;
+    }
+
+    function stakeMax() external onlyMain {
         ISynthetix synthetix = ISynthetix(synthetixResolver.getAddress("Synthetix"));
         require(address(synthetix) != address(0), "Synthetix is missing from Synthetix resolver");
 
         // Transfer SNX to this contract
-        uint256 balance = token.balanceOf(_main);
-        SafeERC20.safeTransferFrom(token, _main, address(this), balance);
+        uint256 balance = token.balanceOf(mainSyther);
+        SafeERC20.safeTransferFrom(token, mainSyther, address(this), balance);
 
+        // Issue max sUSD
         synthetix.issueMaxSynths();
+    }
+
+    function burnMax() external onlyMain {
+        ISynthetix synthetix = ISynthetix(synthetixResolver.getAddress("Synthetix"));
+        require(address(synthetix) != address(0), "Synthetix is missing from Synthetix resolver");
+
+        // Burn max sUSD
+        uint256 balance = token.balanceOf(mainSyther);
+        synthetix.burnSynths(balance);
     }
 }
