@@ -3,13 +3,14 @@ pragma solidity ^0.8.17;
 
 import {ERC4626, ERC20, IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {Staker} from "./Staker.sol";
 
 // Uncomment this line to use console.log
 import "hardhat/console.sol";
 
-contract MainSyther is ERC4626 {
+contract MainSyther is ERC4626, Ownable {
     address public stakerContract;
 
     constructor(
@@ -50,7 +51,7 @@ contract MainSyther is ERC4626 {
     //
 
     // TODO: Guard with onlyOwner
-    function setStakerContract(address _stakerContract) external {
+    function setStakerContract(address _stakerContract) external onlyOwner {
         // Revoke approval of old stakerContract
         IERC20Metadata token = IERC20Metadata(super.asset());
         SafeERC20.safeApprove(token, stakerContract, 0);
@@ -62,11 +63,11 @@ contract MainSyther is ERC4626 {
         SafeERC20.safeApprove(token, _stakerContract, type(uint256).max);
     }
 
-    function stakeMax() external {
+    function stakeMax() external onlyOwner {
         Staker(stakerContract).stakeMax();
     }
 
-    function burnMax() external {
+    function burnMax() external onlyOwner {
         Staker(stakerContract).burnMax();
     }
 }

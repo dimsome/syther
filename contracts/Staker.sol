@@ -5,11 +5,12 @@ import "synthetix/contracts/interfaces/IAddressResolver.sol";
 import "synthetix/contracts/interfaces/ISynthetix.sol";
 
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 // Uncomment this line to use console.log
 import "hardhat/console.sol";
 
-contract Staker {
+contract Staker is Ownable {
     IAddressResolver public synthetixResolver;
     IERC20 public token;
     address public mainSyther;
@@ -19,7 +20,7 @@ contract Staker {
         token = IERC20(_token);
     }
 
-    function init(address _main) external {
+    function init(address _main) external onlyOwner {
         require(mainSyther == address(0), "Staker: Already initialized");
         mainSyther = _main;
     }
