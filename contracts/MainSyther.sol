@@ -9,35 +9,6 @@ import {Staker} from "./Staker.sol";
 // Uncomment this line to use console.log
 import "hardhat/console.sol";
 
-/*
-
- Basic Flow:
-
-    MainSyther.sol -> Staker.sol: SNX
-    Staker.sol -> SNX Staking: SNX
-    Staker.sol <- SNX Staking: sUSD
-    MainSyther.sol <- Staker.sol: sySNX
-
- ┌──────────────┐┌──────────┐┌───────────┐
- │MainSyther.sol││Staker.sol││SNX Staking│
- └──────┬───────┘└────┬─────┘└─────┬─────┘
-        │             │            │      
-        │     SNX     │            │      
-        │────────────>│            │      
-        │             │            │      
-        │             │    SNX     │      
-        │             │───────────>│      
-        │             │            │      
-        │             │    sUSD    │      
-        │             │<───────────│      
-        │             │            │      
-        │    sySNX    │            │      
-        │<────────────│            │      
- ┌──────┴───────┐┌────┴─────┐┌─────┴─────┐
- │MainSyther.sol││Staker.sol││SNX Staking│
- └──────────────┘└──────────┘└───────────┘
- */
-
 contract MainSyther is ERC4626 {
     address public stakerContract;
 
