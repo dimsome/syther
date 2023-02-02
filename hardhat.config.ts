@@ -1,8 +1,11 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@nomicfoundation/hardhat-chai-matchers";
+import "hardhat-cannon";
+import "@typechain/hardhat";
 
 const hardhatConfig: HardhatUserConfig = {
+    defaultNetwork: "cannon",
     solidity: {
         compilers: [
             {

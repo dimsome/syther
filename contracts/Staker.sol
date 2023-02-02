@@ -4,6 +4,9 @@ pragma solidity ^0.8.17;
 import "synthetix/contracts/interfaces/IAddressResolver.sol";
 import "synthetix/contracts/interfaces/ISynthetix.sol";
 
+import "synthetix-v3/protocol/synthetix/contracts/interfaces/IAccountModule.sol";
+// import "synthetix-v3/protocol/synthetix/contracts/interfaces/ICollateralConfigurationModule.sol";
+
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
