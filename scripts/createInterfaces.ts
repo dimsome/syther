@@ -2,7 +2,7 @@ import { generateSolidity } from "abi-to-sol";
 import fs from "fs";
 
 // List of contracts to generate interfaces for
-const contracts = ["CollateralConfigurationModule", "AccountModule"];
+const contracts = ["CollateralConfigurationModule", "AccountModule", "CoreProxy"];
 
 const baseDir = "./contracts/interfaces";
 fs.mkdirSync(baseDir, { recursive: true });
