@@ -2,6 +2,8 @@
 
 Just wrapping SNX with a few extra features.
 
+![Syther](./syther.png)
+
 ## Features
 
 - [x] Deposit SNX
