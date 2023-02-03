@@ -2,7 +2,7 @@
   "scripts": {
     "test:fork:opti": "yarn hardhat --config hardhat-fork-optimism.config.ts test",
     "compile": "yarn hardhat compile && yarn run compile-abis",
-    "compile-abis": "typechain --target=ethers-v5 --out-dir types/generated \"?(contracts|build|deployments)/!(build-info)/**/+([a-zA-Z0-9]).json\"",
+    "compile-abis": "typechain --target=ethers-v5 --out-dir types/generated \"?(contracts|artifacts|deployments)/!(build-info)/**/+([a-zA-Z0-9]).json\"",
     "compile-interfaces": "yarn ts-node ./scripts/createInterfaces.ts"
   },
   "devDependencies": {
