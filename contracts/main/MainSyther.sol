@@ -2,21 +2,21 @@
 pragma solidity ^0.8.17;
 
 import {ERC4626, ERC20, IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-import {ICoreProxy} from "../interfaces/ICoreProxy.sol";
+import {ICoreProxy, CollateralConfiguration} from "../interfaces/ICoreProxy.sol";
 
-// Uncomment this line to use console.log
-import "hardhat/console.sol";
-
-address constant token = 0xC011A72400E58ecD99Ee497CF89E3775d4bd732F; // SNX
+address constant token = 0x7B05A2baA61dFd56951c14597550c803e92B1C95; // SNX
 string constant name = "MainSyther";
 string constant symbol = "sySNX";
 
 contract MainSyther is ERC4626, Ownable {
     uint128 public immutable accountId;
-    ICoreProxy public coreProxy;
+    uint128 public immutable poolId;
+
+    ICoreProxy public immutable coreProxy;
 
     constructor(address _synthetixProxy, uint128 _accountId) ERC4626(IERC20Metadata(token)) ERC20(name(), symbol()) {
         // Create Account
@@ -25,17 +25,80 @@ contract MainSyther is ERC4626, Ownable {
 
         // Set Immutable Variables
         accountId = _accountId;
+        poolId = uint128(coreProxy.getPreferredPool());
     }
 
-    function stake() external onlyOwner {
+    function stakeAndMint() external onlyOwner {
         // Get balance of this contract
-        uint256 balance = IERC20Metadata(token).balanceOf(address(this));
-        require(balance > 0, "MainSyther: No balance to mint");
+        uint256 stakeTokenBalance = IERC20(token).balanceOf(address(this));
+        require(stakeTokenBalance > 0, "MainSyther: No balance to stake");
 
+        // Should collateralization ratio
+        //// if ratio is too low
+        ////// check if it is critically low
+        //////// use collateralToken to deposit, maybe burn some snxUSD
+        ////// else deposit to earn
+        //// else mint
+
+        // Stake and mint
+        _increaseCollateral(stakeTokenBalance);
+        _mintUsd(1e18);
+    }
+
+    /// view functions need to be called via callStatic
+
+    function getCollateralizationRatio() external returns (uint256) {
+        return coreProxy.getPositionCollateralizationRatio(accountId, poolId, token);
+    }
+
+    function getDebtBalance() external returns (int256) {
+        return coreProxy.getPositionDebt(accountId, poolId, token);
+    }
+
+    function getMintableAmount() external returns (uint256) {
+        CollateralConfiguration.Data memory collateralConfiguration = coreProxy.getCollateralConfiguration(token);
+        // struct Data {
+        //     bool depositingEnabled;
+        //     uint256 issuanceRatioD18;
+        //     uint256 liquidationRatioD18;
+        //     uint256 liquidationRewardD18;
+        //     bytes32 oracleNodeId;
+        //     address tokenAddress;
+        //     uint256 minDelegationD18;
+        // }
+        uint256 issuanceRatioD18 = collateralConfiguration.issuanceRatioD18;
+        (uint256 collateralAmount, uint256 collateralValue) = coreProxy.getPositionCollateral(accountId, poolId, token);
+        int256 debtAmount = coreProxy.getPositionDebt(accountId, poolId, token);
+
+        uint256 mintableAmount;
+
+        // Should check debt amount, can be negative, which indicates a credit balance
+        mintableAmount = ((collateralValue - uint256(debtAmount)) * 1e18) / issuanceRatioD18;
+
+        return mintableAmount;
+    }
+
+    function getIssuanceRatio() external returns (uint256) {
+        CollateralConfiguration.Data memory collateralConfiguration = coreProxy.getCollateralConfiguration(token);
+        return collateralConfiguration.issuanceRatioD18;
+    }
+
+    /// internal functions
+
+    function _mintUsd(uint256 _toMint) public {
+        coreProxy.mintUsd(accountId, poolId, token, _toMint);
+    }
+
+    function _burnUsd(uint256 _toBurn) public {
+        coreProxy.burnUsd(accountId, poolId, token, _toBurn);
+    }
+
+    function _increaseCollateral(uint256 _toStake) internal {
         // Approve coreProxy to spend tokens
-        SafeERC20.safeApprove(IERC20Metadata(token), address(coreProxy), balance);
+        SafeERC20.safeApprove(IERC20(token), address(coreProxy), _toStake);
+        coreProxy.deposit(accountId, token, _toStake);
 
-        coreProxy.deposit(accountId, token, balance);
+        coreProxy.delegateCollateral(accountId, poolId, token, _toStake, 1e18);
     }
 
     // //
