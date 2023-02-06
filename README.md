@@ -71,7 +71,8 @@ Basic Flow:
 
 Deposit Flow:
 
-````
+````javascript
+
 "SNX Deposit";
 
 if ("Collateralization Ratio above Threshold?") {
