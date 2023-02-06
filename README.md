@@ -71,7 +71,7 @@ Basic Flow:
 
 Deposit Flow:
 
-````javascript
+`````javascript
 
 "SNX Deposit";
 
@@ -114,7 +114,7 @@ if ("Collateralization Ratio above Threshold?") {
                             └────┘
 
 
-```javascript
+````javascript
 
 ## Contracts
 
@@ -134,4 +134,4 @@ if ("Collateralization Ratio above Threshold?") {
 
 - [x] Create MainSyther.sol file
 - [ ] Do the rest
-````
+`````
