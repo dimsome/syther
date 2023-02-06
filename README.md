@@ -24,7 +24,7 @@ Basic Flow:
     User -> AMMPool: sySNX
     User <- AMMPool: SNX
 
-```css
+```javascript
 
  ┌────┐┌───────┐┌──────────────┐┌───────────┐┌────────────────┐
  │User││AMMPool││MainSyther.sol││SNX Staking││InvestModule.sol│
@@ -69,6 +69,52 @@ Basic Flow:
 
 ```
 
+Deposit Flow:
+
+````
+"SNX Deposit";
+
+if ("Collateralization Ratio above Threshold?") {
+ "Deposit in Staking";
+ "Mint snxUSD";
+} else {
+  if("Collateralization Ratio reaches dangerous Threshold?") {
+    "Deposit in Staking";
+    "Check if need to burn some to get above danger zone";
+  } else {
+    "Deposit in SNX Yield Contract";
+  }
+}
+
+"Done";
+
+         ┌───────────┐
+         │SNX Deposit│
+         └─────┬─────┘
+     __________▽___________
+    ╱                      ╲                                   ┌──────────────────┐
+   ╱ Collateralization      ╲__________________________________│Deposit in Staking│
+   ╲ Ratio above Threshold? ╱yes                               └─────────┬────────┘
+    ╲______________________╱                                       ┌─────▽─────┐
+               │no                                                 │Mint snxUSD│
+  _____________▽______________                                     └─────┬─────┘
+ ╱                            ╲        ┌──────────────────┐              │
+╱ Collateralization Ratio      ╲_______│Deposit in Staking│              │
+╲ reaches dangerous Threshold? ╱yes    └─────────┬────────┘              │
+ ╲____________________________╱    ┌─────────────▽────────────┐          │
+               │no                 │Check if need to burn some│          │
+       ┌───────▽──────┐            │to get above danger zone  │          │
+       │Deposit in SNX│            └─────────────┬────────────┘          │
+       │Yield Contract│                          │                       │
+       └───────┬──────┘                          │                       │
+               └───────────────┬─────────────────┴───────────────────────┘
+                            ┌──▽─┐
+                            │Done│
+                            └────┘
+
+
+```javascript
+
 ## Contracts
 
 - `MainSyther.sol` - Main contract for the project, is used to deposit SNX and mint snxUSD
@@ -87,3 +133,4 @@ Basic Flow:
 
 - [x] Create MainSyther.sol file
 - [ ] Do the rest
+````
