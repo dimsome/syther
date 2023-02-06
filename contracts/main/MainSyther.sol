@@ -16,6 +16,9 @@ contract MainSyther is ERC4626, Ownable {
     uint128 public immutable accountId;
     uint128 public immutable poolId;
 
+    uint256 public targetCollateralizationRatio;
+    uint256 public collateralizationThreshold;
+
     ICoreProxy public immutable coreProxy;
 
     constructor(address _synthetixProxy, uint128 _accountId) ERC4626(IERC20Metadata(token)) ERC20(name(), symbol()) {
@@ -26,28 +29,35 @@ contract MainSyther is ERC4626, Ownable {
         // Set Immutable Variables
         accountId = _accountId;
         poolId = uint128(coreProxy.getPreferredPool());
+
+        // Set config variables
+        targetCollateralizationRatio = 12e17; // 1.2 or 120%
+        // Should check via contract call, for now hardcode
+        collateralizationThreshold = 2e18; // 2 or 200%
     }
 
     function stakeAndMint() external onlyOwner {
-        // Get balance of this contract
+        uint256 collateralizationRatio = getCollateralizationRatio();
         uint256 stakeTokenBalance = IERC20(token).balanceOf(address(this));
-        require(stakeTokenBalance > 0, "MainSyther: No balance to stake");
 
-        // Should collateralization ratio
-        //// if ratio is too low
-        ////// check if it is critically low
-        //////// use collateralToken to deposit, maybe burn some snxUSD
-        ////// else deposit to earn
-        //// else mint
-
-        // Stake and mint
-        _increaseCollateral(stakeTokenBalance);
-        _mintUsd(1e18);
+        // There is probably a better way to do this
+        if (collateralizationRatio < targetCollateralizationRatio) {
+            // Stake
+            _increaseCollateral(stakeTokenBalance);
+        } else if (collateralizationRatio < collateralizationThreshold) {
+            // Cannot mint, but also not below threshold, so do nothing
+            revert("MainSyther: Cannot mint, but also not below threshold, so do nothing");
+        } else {
+            // Stake and mint more
+            _increaseCollateral(stakeTokenBalance);
+            uint256 mintableAmount = getMintableAmount();
+            _mintUsd(mintableAmount);
+        }
     }
 
     /// view functions need to be called via callStatic
 
-    function getCollateralizationRatio() external returns (uint256) {
+    function getCollateralizationRatio() public returns (uint256) {
         return coreProxy.getPositionCollateralizationRatio(accountId, poolId, token);
     }
 
@@ -55,7 +65,7 @@ contract MainSyther is ERC4626, Ownable {
         return coreProxy.getPositionDebt(accountId, poolId, token);
     }
 
-    function getMintableAmount() external returns (uint256) {
+    function getMintableAmount() public returns (uint256) {
         CollateralConfiguration.Data memory collateralConfiguration = coreProxy.getCollateralConfiguration(token);
         // struct Data {
         //     bool depositingEnabled;
@@ -67,18 +77,14 @@ contract MainSyther is ERC4626, Ownable {
         //     uint256 minDelegationD18;
         // }
         uint256 issuanceRatioD18 = collateralConfiguration.issuanceRatioD18;
-        (uint256 collateralAmount, uint256 collateralValue) = coreProxy.getPositionCollateral(accountId, poolId, token);
+        (, uint256 collateralValue) = coreProxy.getPositionCollateral(accountId, poolId, token);
         int256 debtAmount = coreProxy.getPositionDebt(accountId, poolId, token);
 
-        uint256 mintableAmount;
-
         // Should check debt amount, can be negative, which indicates a credit balance
-        mintableAmount = ((collateralValue - uint256(debtAmount)) * 1e18) / issuanceRatioD18;
-
-        return mintableAmount;
+        return ((collateralValue - uint256(debtAmount)) * 1e18) / issuanceRatioD18;
     }
 
-    function getIssuanceRatio() external returns (uint256) {
+    function getIssuanceRatio() external view returns (uint256) {
         CollateralConfiguration.Data memory collateralConfiguration = coreProxy.getCollateralConfiguration(token);
         return collateralConfiguration.issuanceRatioD18;
     }

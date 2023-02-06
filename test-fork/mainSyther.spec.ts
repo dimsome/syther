@@ -1,249 +1,283 @@
 import { expect } from "chai";
-import { Signer } from "ethers";
-import { ethers } from "hardhat";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
+import { Signer, Contract, BigNumberish } from "ethers";
+import { ethers, network } from "hardhat";
 
-import { IERC20, IERC20__factory, MainSyther, MainSyther__factory, Staker, Staker__factory } from "../types/generated";
+// @ts-expect-error
+import { log, error } from "mocha-logger";
 
-// CONFIG
+// Import the ABI and address of the contracts
+import COREPROXY from "../deployments/synthetix/CoreProxy.json";
+import MINTABLETOKEN from "../deployments/collateralToken/MintableToken.json";
+import SNXUSDTOKEN from "../deployments/synthetix/USDProxy.json";
 
-const NAME = "mainSyther";
-const SYMBOL = "sySNX";
-const ADDRESS_DEAD = "0x000000000000000000000000000000000000dEaD";
+// Import the ABI from typechain
+import { MainSyther, MainSyther__factory } from "../types/generated";
 
-// CONTRACTS
-const SNX_ADDRESS = "0x8700dAec35aF8Ff88c16BdF0418774CB3D7599B4";
-const SNX_WHALE_ADDRESS = "0xacd03d601e5bb1b275bb94076ff46ed9d753435a";
-const SNX_RESOLVER_ADDRESS = "0x95A6a3f44a70172E7d50a9e28c85Dfd712756B8C";
-const sUSD_ADDRESS = "0x8c6f28f2F1A3C87F0f938b96d27520d9751ec8d9";
+// ACCOUNTS
+const accountIdEOA = Math.floor(Math.random() * 1000000000);
+const accountIdContract = 1337;
 
-let SNX_Contract: IERC20;
-let sUSD_Contract: IERC20;
-let stakerContract: Staker;
-let mainSytherContract: MainSyther;
-let SNX_WhaleImpersonated: Signer;
+let snapshotId: any;
 
-let signer: Signer;
+const fromWei = (amount: BigNumberish) => ethers.utils.formatEther(amount.toString());
 
-context("Tests for mainSyther contract", () => {
-    SNX_Contract = IERC20__factory.connect(SNX_ADDRESS, ethers.provider);
-    sUSD_Contract = IERC20__factory.connect(sUSD_ADDRESS, ethers.provider);
+context("Test mainSyther contract using Cannon", async () => {
+    let signer: Signer;
+    let coreProxy: Contract;
+    let collateralToken: Contract;
+    let snxusdToken: Contract;
+    let mainSyther: MainSyther;
 
-    describe("Test forking setup", () => {
-        it("Should return current block number", async function () {
+    const setup = async () => {
+        log("Setup");
+        try {
+            snapshotId = await network.provider.request({
+                method: "evm_snapshot",
+                params: [],
+            });
+
+            log("Snapshot ID: ", snapshotId);
+        } catch (e) {
+            error("Failed to snapshot network");
+        }
+
+        const [owner] = await ethers.getSigners();
+        signer = owner;
+
+        coreProxy = new ethers.Contract(COREPROXY.address, COREPROXY.abi, signer);
+        collateralToken = new ethers.Contract(MINTABLETOKEN.address, MINTABLETOKEN.abi, signer);
+        snxusdToken = new ethers.Contract(SNXUSDTOKEN.address, SNXUSDTOKEN.abi, signer);
+    };
+
+    before("Setup", async () => {
+        await setup();
+    });
+
+    after("Reset Network", async () => {
+        log("Resetting network");
+        try {
+            await network.provider.request({
+                method: "evm_revert",
+                params: [snapshotId],
+            });
+        } catch (e) {
+            error("Failed to reset network");
+            error(e);
+        }
+    });
+
+    describe("Test Setup", () => {
+        it("Should return current block number", async () => {
             const blockNumber = await ethers.provider.getBlockNumber();
-            console.log("Block number: ", blockNumber);
+            log("Block number: ", blockNumber);
             expect(blockNumber).to.be.greaterThanOrEqual(0);
         });
 
         // This test to check if the fork is working
         it("Should return the correct balance for default account", async () => {
-            const [owner] = await ethers.getSigners();
-            const balance = await owner.getBalance();
-            console.log("Balance: ", balance.toString());
+            const balance = await signer.getBalance();
+            log("Balance: ", fromWei(balance));
             expect(balance.eq(ethers.utils.parseEther("100")));
-
-            signer = owner;
-        });
-
-        it("Should return the correct balance for SNX whale", async () => {
-            const balance = await SNX_Contract.balanceOf(SNX_WHALE_ADDRESS);
-            console.log("Balance: ", balance.toString());
-            expect(balance.gt(0));
-        });
-
-        it("Should impersonate SNX_WHALE_ADDRESS", async () => {
-            SNX_WhaleImpersonated = await ethers.getImpersonatedSigner(SNX_WHALE_ADDRESS);
-            expect(SNX_WhaleImpersonated).to.be.not.null;
-
-            // Test if SNX_WHALE_ADDRESS is impersonated by sending a transaction
-            const balanceBefore = await SNX_Contract.connect(SNX_WhaleImpersonated).balanceOf(SNX_WHALE_ADDRESS);
-            console.log("Balance Before: ", balanceBefore.toString());
-
-            const tx = await SNX_Contract.connect(SNX_WhaleImpersonated).transfer(ADDRESS_DEAD, 1);
-            await tx.wait();
-
-            const balanceAfter = await SNX_Contract.connect(SNX_WhaleImpersonated).balanceOf(SNX_WHALE_ADDRESS);
-            console.log("Balance After: ", balanceAfter.toString());
-
-            expect(balanceAfter).lt(balanceBefore);
         });
     });
 
-    describe("Deploy contracts", () => {
-        it("Should deploy Staker contract", async () => {
-            // Deploy Staker contract
-            stakerContract = await new Staker__factory(ethers.provider.getSigner(0)).deploy(
-                SNX_RESOLVER_ADDRESS,
-                SNX_ADDRESS
+    describe("Opening Account with Synthetix CoreProxy, from EOA", () => {
+        it("Should open an account with Synthetix CoreProxy", async () => {
+            const tx = await coreProxy.connect(signer).createAccount(accountIdEOA);
+            const receipt = await tx.wait();
+
+            expect(receipt.status).equal(1);
+            expect(receipt)
+                .to.emit(coreProxy, "AccountCreated")
+                .withArgs(await signer.getAddress(), accountIdEOA);
+
+            log("Account created with id: ", accountIdEOA);
+            log("Account created with address: ", await signer.getAddress());
+        });
+        it("Should retrieve the Collateral Type", async () => {
+            // The token should be define already
+            expect(collateralToken).to.be.not.null;
+            expect(collateralToken.address).to.be.properAddress;
+
+            const collateralTypes = await coreProxy.connect(signer).getCollateralConfigurations(false);
+            log("In total found: ", collateralTypes.length);
+            expect(collateralTypes.length).to.be.greaterThanOrEqual(0);
+
+            // Verify that is the same address
+            expect(collateralTypes[0].tokenAddress).to.be.equal(collateralToken.address);
+            log("Collateral Address: ", collateralTypes[0].tokenAddress);
+        });
+        it("Should mint some collateralTokens for signer", async () => {
+            const mintAmount = ethers.utils.parseEther("100");
+
+            // Balance of signer before minting
+            const balanceBefore = await collateralToken.connect(signer).balanceOf(await signer.getAddress());
+            log("Balance before minting: ", fromWei(balanceBefore));
+            expect(balanceBefore).eq(0);
+
+            const tx = await collateralToken.connect(signer).mint(mintAmount, await signer.getAddress());
+            const receipt = await tx.wait();
+
+            expect(receipt.status).equal(1);
+            expect(receipt)
+                .to.emit(collateralToken, "Transfer")
+                .withArgs(ethers.constants.AddressZero, await signer.getAddress(), mintAmount);
+
+            // Balance of signer after minting
+            const balanceAfter = await collateralToken.connect(signer).balanceOf(await signer.getAddress());
+            log("Balance after minting: ", fromWei(balanceAfter));
+            expect(balanceAfter).eq(mintAmount);
+        });
+    });
+    describe("MainSyther deployment and functional test", () => {
+        it("Should deploy and open an account with Synthetix CoreProxy", async () => {
+            // Deploy the mainSyther contract
+            mainSyther = await new MainSyther__factory(signer).deploy(COREPROXY.address, accountIdContract);
+            const receipt = await mainSyther.deployed();
+
+            // Check if the contract is deployed
+            expect(mainSyther).to.be.not.null;
+            expect(mainSyther.address).to.be.properAddress;
+            log("MainSyther deployed at: ", mainSyther.address);
+
+            // Check if the account is created via the event
+            expect(receipt).to.emit(coreProxy, "AccountCreated").withArgs(mainSyther.address, accountIdContract);
+
+            // Check if the account is created via the getter function
+            const accountOwner = await coreProxy.connect(signer).getAccountOwner(accountIdContract);
+            expect(accountOwner).to.be.equal(mainSyther.address);
+
+            log("Account created with id: ", accountIdContract);
+        });
+        it("Should deposit collateral Token in the staking contract and mint snxUSD", async () => {
+            const mintAmount = ethers.utils.parseEther("100");
+
+            const balanceBefore = await collateralToken.connect(signer).balanceOf(mainSyther.address);
+            log("Balance before mint: ", fromWei(balanceBefore));
+            expect(balanceBefore).eq(0);
+
+            // Add the collateralToken to the account
+            await collateralToken.connect(signer).mint(mintAmount, mainSyther.address);
+
+            // Check if the collateralToken is added to the account
+            const balanceAfter = await collateralToken.connect(signer).balanceOf(mainSyther.address);
+            log("Balance after mint: ", fromWei(balanceAfter));
+            expect(balanceAfter).eq(mintAmount);
+
+            // No debt token before staking
+            const debtTokenBalanceBefore = await snxusdToken.connect(signer).balanceOf(mainSyther.address);
+            log("Debt token balance before staking: ", fromWei(debtTokenBalanceBefore));
+            expect(debtTokenBalanceBefore).eq(0);
+
+            // Check the preferedPool
+            const preferedPool = await coreProxy.connect(signer).getPreferredPool();
+            log("Prefered Pool: ", preferedPool);
+
+            // deposit the collateralToken in the staking contract
+            const tx = await mainSyther.connect(signer).stakeAndMint();
+            const receipt = await tx.wait();
+
+            expect(receipt.status).equal(1);
+            expect(receipt)
+                .to.emit(coreProxy, "CollateralDeposited")
+                .withArgs(accountIdContract, mainSyther.address, mintAmount)
+                .and.to.emit(collateralToken, "Transfer")
+                .withArgs(mainSyther.address, COREPROXY.address, mintAmount);
+
+            // Check allowance
+            const allowance = await collateralToken.connect(signer).allowance(mainSyther.address, COREPROXY.address);
+            log("Allowance: ", fromWei(allowance));
+            // Back to 0 if the allowance is used
+            expect(allowance).eq(0);
+
+            // Check if the collateralToken is removed from the account
+            const balanceAfterStaking = await collateralToken.connect(signer).balanceOf(mainSyther.address);
+            log("Balance after staking: ", fromWei(balanceAfterStaking));
+            expect(balanceAfterStaking).eq(0);
+
+            // Check if debt token is minted
+            const debtTokenBalanceAfter = await snxusdToken.connect(signer).balanceOf(mainSyther.address);
+            log("Debt token balance after staking: ", fromWei(debtTokenBalanceAfter));
+            expect(debtTokenBalanceAfter).gt(0);
+        });
+        it("Should burn snxUSD", async () => {
+            const debtTokenBalanceBefore = await snxusdToken.connect(signer).balanceOf(mainSyther.address);
+            log("Debt token balance before burning: ", fromWei(debtTokenBalanceBefore));
+            expect(debtTokenBalanceBefore).gt(0);
+
+            // Burn the debt token
+            const tx = await mainSyther.connect(signer)._burnUsd(debtTokenBalanceBefore);
+            const receipt = await tx.wait();
+
+            expect(receipt.status).equal(1);
+            expect(receipt)
+                .and.to.emit(snxusdToken, "Transfer")
+                .withArgs(mainSyther.address, ethers.constants.AddressZero, debtTokenBalanceBefore);
+
+            // Check if debt token is burned
+            const debtTokenBalanceAfter = await snxusdToken.connect(signer).balanceOf(mainSyther.address);
+            log("Debt token balance after unstaking: ", fromWei(debtTokenBalanceAfter));
+            expect(debtTokenBalanceAfter).eq(0);
+        });
+        it("Should retrieve view parameters", async () => {
+            // Get collaterization ratio use callStatic
+            const collaterizationRatio = await mainSyther.connect(signer).callStatic.getCollateralizationRatio();
+            log("Collaterization Ratio: ", fromWei(collaterizationRatio));
+            expect(collaterizationRatio).gt(0);
+
+            // Get debt balance
+            const debtBalance = await mainSyther.connect(signer).callStatic.getDebtBalance();
+            log("Debt Balance: ", fromWei(debtBalance));
+            expect(debtBalance).gte(0);
+
+            // Get mintable amount
+            const mintableAmount = await mainSyther.connect(signer).callStatic.getMintableAmount();
+            log("Mintable Amount: ", fromWei(mintableAmount));
+            expect(mintableAmount).gt(0);
+        });
+        it("Should calculate the correct mintable amount", async () => {
+            const mintableAmount = await mainSyther.connect(signer).callStatic.getMintableAmount();
+            log("Mintable Amount: ", fromWei(mintableAmount));
+
+            const issuanceRatio = await mainSyther.connect(signer).callStatic.getIssuanceRatio();
+            log("Issuance Ratio: ", fromWei(issuanceRatio));
+
+            // Save a snapshot of the current state
+            const snapshotId = await ethers.provider.send("evm_snapshot", []);
+
+            // Mint more collateralToken
+            const mintAmount = ethers.utils.parseEther("100");
+            await collateralToken.connect(signer).mint(mintAmount, mainSyther.address);
+
+            // Check if the collateralToken is added to the account
+            const balanceAfter = await collateralToken.connect(signer).balanceOf(mainSyther.address);
+            log("Balance after mint: ", fromWei(balanceAfter));
+            expect(balanceAfter).eq(mintAmount);
+
+            // Mint the debt token
+            const tx = await mainSyther.connect(signer)._mintUsd(mintableAmount);
+            const receipt = await tx.wait();
+
+            expect(receipt.status).equal(1);
+            expect(receipt)
+                .to.emit(snxusdToken, "Transfer")
+                .withArgs("0x0000000000000000000000000000000000000000", mainSyther.address, mintableAmount);
+
+            // Check if the debt token is minted
+            const debtTokenBalanceAfter = await snxusdToken.connect(signer).balanceOf(mainSyther.address);
+            log("Debt token balance after minting: ", fromWei(debtTokenBalanceAfter));
+            expect(debtTokenBalanceAfter).gt(0);
+
+            // Revert to the snapshot and check if tx fails for minting more than mintable amount
+            await ethers.provider.send("evm_revert", [snapshotId]);
+            log("Reverted to snapshot: ", snapshotId);
+
+            // Mint the debt token
+            log("Trying to mint more than mintable amount");
+            await expect(mainSyther.connect(signer)._mintUsd(mintableAmount.add(1))).to.be.revertedWithCustomError(
+                coreProxy,
+                "InsufficientCollateralRatio"
             );
-            await stakerContract.deployed();
-
-            // Check if Staker contract is deployed
-            expect(stakerContract.address).to.be.properAddress;
-            console.log("Deployed Staker contract address: ", stakerContract.address);
-
-            // Check if Staker contract has the correct resolver address
-            expect(await stakerContract.synthetixResolver()).equal(SNX_RESOLVER_ADDRESS);
-        });
-        it("Should deploy mainSyther contract", async () => {
-            // Deploy mainSyther contract
-            mainSytherContract = await new MainSyther__factory(ethers.provider.getSigner(0)).deploy(
-                SNX_ADDRESS,
-                NAME,
-                SYMBOL,
-                stakerContract.address
-            );
-            await mainSytherContract.deployed();
-
-            // Check if mainSyther contract is deployed
-            expect(mainSytherContract.address).to.be.properAddress;
-            console.log("Deployed mainSyther contract address: ", mainSytherContract.address);
-
-            // Check if mainSyther contract has the correct token address, name and symbol
-            expect(await mainSytherContract.asset()).equal(SNX_ADDRESS);
-            expect(await mainSytherContract.name()).equal(NAME);
-            expect(await mainSytherContract.symbol()).equal(SYMBOL);
-            expect(await mainSytherContract.stakerContract()).equal(stakerContract.address);
-
-            // Check if approvals are set correctly
-            expect(await SNX_Contract.allowance(mainSytherContract.address, stakerContract.address)).equal(
-                ethers.constants.MaxUint256
-            );
-        });
-        it("Should set mainSyther contract as the staker main contract", async () => {
-            // Check if is address(0) before setting
-            expect(await stakerContract.mainSyther()).equal(ethers.constants.AddressZero);
-
-            // Set mainSyther contract as the staker main contract
-            const tx = await stakerContract.init(mainSytherContract.address);
-
-            // Check if mainSyther contract is set correctly
-            expect(await stakerContract.mainSyther()).equal(mainSytherContract.address);
-        });
-        it("Should deposit SNX and mint sySNX", async () => {
-            // Check WHALE balances before deposit
-            const WHALE_balanceBefore = await SNX_Contract.balanceOf(SNX_WHALE_ADDRESS);
-            const WHALE_sySNX_balanceBefore = await mainSytherContract.balanceOf(SNX_WHALE_ADDRESS);
-
-            expect(WHALE_balanceBefore).gt(0);
-            expect(WHALE_sySNX_balanceBefore).eq(0);
-
-            console.log("WHALE_balanceBefore: ", WHALE_balanceBefore.toString());
-            console.log("WHALE_sySNX_balanceBefore: ", WHALE_sySNX_balanceBefore.toString());
-
-            // Check mainSyther contract balance before deposit
-            const mainSytherContract_balanceBefore = await SNX_Contract.balanceOf(mainSytherContract.address);
-            const mainSytherContract_totalAssetsBefore = await mainSytherContract.totalAssets();
-
-            console.log("mainSytherContract_balanceBefore: ", mainSytherContract_balanceBefore.toString());
-            console.log("mainSytherContract_totalAssetsBefore: ", mainSytherContract_totalAssetsBefore.toString());
-
-            expect(mainSytherContract_balanceBefore).eq(0);
-            expect(mainSytherContract_totalAssetsBefore).eq(0);
-
-            // Approve mainSyther contract to spend SNX
-            const txApprove = await SNX_Contract.connect(SNX_WhaleImpersonated).approve(
-                mainSytherContract.address,
-                ethers.utils.parseEther("100")
-            );
-            await txApprove.wait();
-
-            // Deposit SNX
-            const txDeposit = await mainSytherContract
-                .connect(SNX_WhaleImpersonated)
-                .deposit(ethers.utils.parseEther("100"), SNX_WhaleImpersonated.getAddress());
-            await txDeposit.wait();
-
-            // Check WHALE balances after deposit
-            const WHALE_balanceAfter = await SNX_Contract.balanceOf(SNX_WHALE_ADDRESS);
-            const WHALE_sySNX_balanceAfter = await mainSytherContract.balanceOf(SNX_WHALE_ADDRESS);
-
-            expect(WHALE_balanceAfter).lt(WHALE_balanceBefore);
-            expect(WHALE_sySNX_balanceAfter).gt(WHALE_sySNX_balanceBefore);
-
-            console.log("WHALE_balanceAfter: ", WHALE_balanceAfter.toString());
-            console.log("WHALE_sySNX_balanceAfter: ", WHALE_sySNX_balanceAfter.toString());
-
-            // Check mainSyther contract balance after deposit
-            const mainSytherContract_balanceAfter = await SNX_Contract.balanceOf(mainSytherContract.address);
-            const mainSytherContract_totalAssetsAfter = await mainSytherContract.totalAssets();
-            const mainSytherContract_totalSupply = await mainSytherContract.totalSupply();
-
-            console.log("mainSytherContract_balanceAfter: ", mainSytherContract_balanceAfter.toString());
-            console.log("mainSytherContract_totalAssetsAfter: ", mainSytherContract_totalAssetsAfter.toString());
-            console.log("mainSytherContract_totalSupply: ", mainSytherContract_totalSupply.toString());
-
-            expect(mainSytherContract_balanceAfter).gt(mainSytherContract_balanceBefore);
-            expect(mainSytherContract_totalAssetsAfter).gt(mainSytherContract_totalAssetsBefore);
-            expect(mainSytherContract_totalSupply).equal(mainSytherContract_totalAssetsAfter);
-
-            // Staker contract should not have any SNX at this point
-            const stakerContract_balance = await SNX_Contract.balanceOf(stakerContract.address);
-            expect(stakerContract_balance).eq(0);
-        });
-        it.skip("Should withdraw SNX and burn sySNX", async () => {});
-        it("Should stake SNX and mint max sUSD", async () => {
-            // Make sure mainSyther contract has SNX
-            const mainSytherContract_balanceBefore = await SNX_Contract.balanceOf(mainSytherContract.address);
-            expect(mainSytherContract_balanceBefore).gt(0);
-
-            console.log("mainSytherContract_balanceBefore: ", mainSytherContract_balanceBefore.toString());
-
-            // Check Staker contract balance before stake
-            const stakerContract_balanceBefore = await SNX_Contract.balanceOf(stakerContract.address);
-            expect(stakerContract_balanceBefore).eq(0);
-            const stakerContract_sUSD_balanceBefore = await sUSD_Contract.balanceOf(stakerContract.address);
-            expect(stakerContract_sUSD_balanceBefore).eq(0);
-
-            console.log("stakerContract_balanceBefore: ", stakerContract_balanceBefore.toString());
-            console.log("stakerContract_sUSD_balanceBefore: ", stakerContract_sUSD_balanceBefore.toString());
-
-            // Call stakeMax function
-            const txStakeMax = await mainSytherContract.connect(signer).stakeMax();
-            await txStakeMax.wait();
-
-            // Check Staker contract balance after stake
-            const stakerContract_balanceAfter = await SNX_Contract.balanceOf(stakerContract.address);
-            expect(stakerContract_balanceAfter).gt(stakerContract_balanceBefore);
-            const stakerContract_sUSD_balanceAfter = await sUSD_Contract.balanceOf(stakerContract.address);
-            expect(stakerContract_sUSD_balanceAfter).gt(stakerContract_sUSD_balanceBefore);
-
-            console.log("stakerContract_balanceAfter: ", stakerContract_balanceAfter.toString());
-            console.log("stakerContract_sUSD_balanceAfter: ", stakerContract_sUSD_balanceAfter.toString());
-
-            // Check mainSyther contract balance after stake
-            const mainSytherContract_balanceAfter = await SNX_Contract.balanceOf(mainSytherContract.address);
-            expect(mainSytherContract_balanceAfter).eq(0);
-
-            expect(mainSytherContract_balanceAfter).lt(mainSytherContract_balanceBefore);
-            console.log("mainSytherContract_balanceAfter: ", mainSytherContract_balanceAfter.toString());
-        });
-        // This test is not working, need to advance time to 7 days
-        // After 7 days, the synth or SNX rate is invalid (Oracle issue?)
-        it.skip("Should unstake SNX and burn max sUSD", async () => {
-            // Make sure there is sUSD and SNX in Staker contract
-            const stakerContract_balanceBefore = await SNX_Contract.balanceOf(stakerContract.address);
-            expect(stakerContract_balanceBefore).gt(0);
-            const stakerContract_sUSD_balanceBefore = await sUSD_Contract.balanceOf(stakerContract.address);
-            expect(stakerContract_sUSD_balanceBefore).gt(0);
-
-            console.log("stakerContract_balanceBefore: ", stakerContract_balanceBefore.toString());
-            console.log("stakerContract_sUSD_balanceBefore: ", stakerContract_sUSD_balanceBefore.toString());
-
-            // Call unstakeMax function forward time 7 day
-            await time.increase(time.duration.days(7));
-            const txUnstakeMax = await mainSytherContract.connect(signer).burnMax();
-            await txUnstakeMax.wait();
-
-            // Check Staker contract balance after unstake
-            const stakerContract_balanceAfter = await SNX_Contract.balanceOf(stakerContract.address);
-            expect(stakerContract_balanceAfter).eq(stakerContract_balanceBefore);
-            const stakerContract_sUSD_balanceAfter = await sUSD_Contract.balanceOf(stakerContract.address);
-            expect(stakerContract_sUSD_balanceAfter).eq(0);
-
-            console.log("stakerContract_balanceAfter: ", stakerContract_balanceAfter.toString());
-            console.log("stakerContract_sUSD_balanceAfter: ", stakerContract_sUSD_balanceAfter.toString());
         });
     });
 });
