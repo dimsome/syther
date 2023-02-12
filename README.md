@@ -8,6 +8,30 @@ Just wrapping SNX with a few extra features, getting ready for Synthetix V3.
 
 - Start fresh, with Synthetix V3
 
+## Getting Started
+
+Clone the repo and contribute!
+
+Install dependencies:
+
+```bash
+
+npm install
+
+```
+
+This project requires [Cannon](https://usecannon.com/), review the [Get Started](https://usecannon.com/get-started) guide.
+
+```bash
+npm i -g @usecannon/cli
+```
+
+And start an instance of a Cannon node with deployed Synthetix V3 contracts in a separate terminal:
+
+```bash
+cannon synthetix-sandbox
+```
+
 ## Basic Flow
 
 Basic Flow:
