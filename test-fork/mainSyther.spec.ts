@@ -119,7 +119,7 @@ context("Test MainSyther contract using Cannon", async () => {
             expect(collateralTypes[0].tokenAddress).eq(await collateralToken.getAddress());
             log("Collateral Address: ", collateralTypes[0].tokenAddress);
         });
-        it.skip("Should mint some collateralTokens for signer", async () => {
+        it("Should mint some collateralTokens for signer", async () => {
             const mintAmount = ethers.parseEther("100");
 
             // Balance of signer before minting
