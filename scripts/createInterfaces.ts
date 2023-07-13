@@ -9,8 +9,8 @@ fs.mkdirSync(baseDir, { recursive: true });
 
 // Generate interfaces for each contract
 contracts.forEach((contract) => {
-    let abi;
-    let solidityInterface;
+    let abi: any[];
+    let solidityInterface: string;
 
     try {
         abi = require(`../deployments/synthetix/${contract}.json`).abi;

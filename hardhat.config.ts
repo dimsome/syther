@@ -1,11 +1,11 @@
 import { HardhatUserConfig } from "hardhat/config";
-import "@nomicfoundation/hardhat-toolbox";
 import "@nomicfoundation/hardhat-chai-matchers";
-import "hardhat-cannon";
+import "@nomicfoundation/hardhat-toolbox";
+import "@nomicfoundation/hardhat-ethers";
 import "@typechain/hardhat";
 
-const hardhatConfig: HardhatUserConfig = {
-    defaultNetwork: "cannon",
+const config: HardhatUserConfig = {
+    defaultNetwork: "localhost",
     solidity: {
         compilers: [
             {
@@ -21,8 +21,13 @@ const hardhatConfig: HardhatUserConfig = {
     },
     typechain: {
         outDir: "types/generated",
-        target: "ethers-v5",
+        target: "ethers-v6",
+    },
+    networks: {
+        localhost: {
+            url: "http://127.0.0.1:8545",
+        },
     },
 };
 
-export default hardhatConfig;
+export default config;

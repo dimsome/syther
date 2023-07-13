@@ -7,9 +7,12 @@ const config: HardhatUserConfig = {
         hardhat: {
             forking: {
                 url: "https://opt-mainnet.g.alchemy.com/v2/" + process.env.ALCHEMY_OPTIMISM_API_KEY,
-                blockNumber: 52488992,
+                // blockNumber: 52488992,
             },
         },
+    },
+    paths: {
+        tests: "./test-fork",
     },
 };
 
